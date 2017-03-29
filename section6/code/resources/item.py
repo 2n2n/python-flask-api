@@ -9,6 +9,12 @@ class Item(Resource):
 		required=True,
 		help="This field cannot be left blank!"
 	)
+
+	parser.add_argument('store_id',
+		type=int,
+		required=True,
+		help="Every Item needs a store_id"
+	)
 	
 	@jwt_required()
 	def get(self, name):
@@ -23,53 +29,38 @@ class Item(Resource):
 
 		data = self.parser.parse_args()
 
-		item = ItemModel(name, data['price'])
+		item = ItemModel(name, **data)
 
 		try:
-			item.insert()
+			item.save_to_db()
 		except:
 			return { "message": "An error occurred inserting the item." }, 500
 		return item.json(), 201
 
 	@jwt_required()
 	def delete(self, name):
-		connection = sqlite3.connect('data.db')
-		cursor = connection.cursor()
-
-		query = "DELETE FROM items WHERE name=?"
-		cursor.execute(query, (name,))
-
-		connection.commit()
-		connection.close()
-
+		item = ItemModel.find_by_name(name)
+		if item:
+			item.delete_from_db()
 		return {'message': 'Item deleted'}
 	
 	def put(self, name):
 		data = self.parser.parse_args()
 		item = ItemModel.find_by_name(name)
-		updated_item = ItemModel(name, data['price'])
 		if item is None:
 			try:
-				updated_item.insert()
+				item = ItemModel(name, **data)
 			except:
 				return { "message": "An error occured inserting the item" }, 500
 		else:
 			try:
-				item.update(updated_item)
+				item.price = data['price'] 
 			except:
 				return { "message": "An error occured updating the item" }, 500
-		return updated_item.json()
+		item.save_to_db()
+		return item.json()
 
 
 class ItemList(Resource):
 	def get(self):
-		connection = sqlite3.connect('data.db', detect_types=sqlite3.PARSE_COLNAMES)
-		cursor = connection.cursor()
-
-		query = "SELECT * FROM items"
-		result = cursor.execute(query)
-		items = []
-		for row in result:
-			items.append({ 'name': row[0], 'price': row[1]})
-
-		return {'items': items }
+		return {'items': [item.json() for item in ItemModel.query.all()] }
